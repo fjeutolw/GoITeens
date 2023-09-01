@@ -1,0 +1,75 @@
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.utils import executor
+from sympy import Eq, solve, symbols
+
+logging.basicConfig(level=logging.INFO)
+
+API_TOKEN = '6300419075:AAFB8ujuFZ-Ta0K8VggVuLmHFlfTDge2lZY'
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot)
+
+operation_state = {}
+
+@dp.message_handler(commands=['start'])
+async def start_message(message: types.Message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    add_button = types.KeyboardButton("Додати")
+    subtract_button = types.KeyboardButton("Відняти")
+    multiply_button = types.KeyboardButton("Помножити")
+    divide_button = types.KeyboardButton("Поділити")
+    differential_equations_button = types.KeyboardButton("Диференціальні рівняня")
+    markup.row(add_button, subtract_button)
+    markup.row(multiply_button, divide_button)
+    markup.add(differential_equations_button)
+
+    await message.answer(
+        "Привіт! Я бот, який може вирішувати приклади з додаванням, відніманням, множенням або діленням.",
+        reply_markup=markup)
+
+@dp.message_handler(lambda message: message.text == "Диференціальні рівняня")
+async def differential_equations(message: types.Message):
+    await message.answer("Введи диференціальне рівняння у форматі 'dy/dx = f(x, y)'. Наприклад, 'dy/dx = x + y'.")
+
+@dp.message_handler(lambda message: "dy/dx =" in message.text)
+async def solve_differential_equation(message: types.Message):
+    try:
+        equation = message.text.replace("dy/dx =", "").strip()
+        x, y = symbols('x y')
+        f = Eq(y.diff(x), eval(equation))
+
+        solution = solve(f, y)
+        await message.answer(f"Розв'язок рівняння: {solution}")
+
+    except Exception as e:
+        await message.answer("Виникла помилка при вирішенні рівняння.")
+
+@dp.message_handler(lambda message: message.text in ["Додати", "Відняти", "Помножити", "Поділити"])
+async def choose_operation(message: types.Message):
+    operation_state[message.from_user.id] = message.text
+    await message.answer(f"Введи приклад для {message.text.lower()} у форматі 'X {message.text} Y'.")
+
+@dp.message_handler(lambda message: operation_state.get(message.from_user.id) in ["Додати", "Відняти", "Помножити", "Поділити"]
+                                    and any(operator in message.text for operator in ["+", "-", "*", "/"]))
+async def solve_operation(message: types.Message):
+    try:
+        operator = "+" if "Додати" in operation_state[message.from_user.id] else \
+            "-" if "Відняти" in operation_state[message.from_user.id] else \
+                "*" if "Помножити" in operation_state[message.from_user.id] else "/"
+        x, y = map(int, message.text.split(operator))
+        if operator == "+":
+            result = x + y
+        elif operator == "-":
+            result = x - y
+        elif operator == "*":
+            result = x * y
+        else:
+            result = x // y
+        await message.answer(f"Результат {operation_state[message.from_user.id].lower()} {x} {operator} {y} = {result}")
+    except Exception as e:
+        await message.answer("Виникла помилка при обчисленні. Спробуйте ще раз.")
+
+    del operation_state[message.from_user.id]
+
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
